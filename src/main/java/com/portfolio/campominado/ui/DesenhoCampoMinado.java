@@ -1,6 +1,7 @@
 package com.portfolio.campominado.ui;
 
 import com.portfolio.campominado.core.Celula;
+import com.portfolio.campominado.core.Dificuldade;
 import com.portfolio.campominado.core.Tabuleiro;
 
 import java.awt.BasicStroke;
@@ -41,6 +42,15 @@ public final class DesenhoCampoMinado {
 
     /** O cursor do teclado, que o mouse não usa. */
     public static final Color COR_CURSOR = new Color(0x2f, 0x8f, 0xd2);
+
+    /** O painel do menu e do fim, um degrau acima do fundo. */
+    public static final Color COR_PAINEL = new Color(0x24, 0x2a, 0x31);
+    /** O botão comum: sem realce, só convidando o clique. */
+    public static final Color COR_BOTAO = new Color(0x2f, 0x36, 0x3e);
+    /** O botão sob o mouse, um degrau mais claro. */
+    public static final Color COR_BOTAO_HOVER = new Color(0x3a, 0x43, 0x4e);
+    /** A borda dos botões e o selo do recorde. */
+    public static final Color COR_ACENTO = new Color(0x4f, 0xa3, 0x4f);
 
     private static final Color COR_TEXTO_HUD = new Color(0xe8, 0xea, 0xed);
     /** A bandeira, vermelha para não parecer com nenhum número. */
@@ -99,6 +109,125 @@ public final class DesenhoCampoMinado {
             g2.setStroke(new BasicStroke(3));
             g2.drawRect(r.x + 1, r.y + 1, r.width - 3, r.height - 3);
         }
+    }
+
+    /**
+     * Pinta o menu: o título, a dificuldade escolhida e os quatro botões.
+     *
+     * @param g2              o pincel, apontando para a tela inteira
+     * @param menu            a geometria do menu
+     * @param selecionada     a dificuldade em destaque
+     * @param hover           o alvo sob o mouse, ou {@code null}
+     */
+    public void pintarMenu(Graphics2D g2, LayoutCampoMinado.Menu menu,
+            Dificuldade selecionada, LayoutCampoMinado.Alvo hover) {
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        g2.setColor(FUNDO);
+        g2.fill(menu.janela());
+
+        pintarPainel(g2, menu.painel(), COR_PAINEL, COR_TEXTO_HUD);
+        centraliza(g2, menu.titulo(), "CAMPO MINADO", new Font("SansSerif", Font.BOLD, 26),
+                COR_TEXTO_HUD);
+        centraliza(g2, menu.rotulo(), "Dificuldade: " + selecionada.getRotulo(),
+                new Font("SansSerif", Font.BOLD, 15), COR_TEXTO_HUD);
+
+        pintarBotao(g2, menu.facil(), LayoutCampoMinado.Alvo.FACIL, "FACIL", hover);
+        pintarBotao(g2, menu.medio(), LayoutCampoMinado.Alvo.MEDIO, "MEDIO", hover);
+        pintarBotao(g2, menu.dificil(), LayoutCampoMinado.Alvo.DIFICIL, "DIFICIL", hover);
+        desenhaSelecao(g2, menu.facil(), selecionada == Dificuldade.FACIL);
+        desenhaSelecao(g2, menu.medio(), selecionada == Dificuldade.MEDIO);
+        desenhaSelecao(g2, menu.dificil(), selecionada == Dificuldade.DIFICIL);
+        pintarBotao(g2, menu.comecar(), LayoutCampoMinado.Alvo.COMECAR, "COMECAR", hover);
+
+        centraliza(g2, menu.dica(),
+                "1-3 escolhem a dificuldade, Enter começa",
+                new Font("SansSerif", Font.PLAIN, 12), new Color(0x9a, 0xa1, 0xa9));
+    }
+
+    /**
+     * Pinta o fim de partida: o resultado, o tempo, o selo de recorde e as duas
+     * saídas.
+     *
+     * @param g2        o pincel
+     * @param fim       a geometria do fim
+     * @param titulo    "Você venceu" ou "Você perdeu"
+     * @param subtitulo a linha do tempo e do melhor tempo
+     * @param novoRecorde se um recorde acabou de ser batido
+     * @param hover     o alvo sob o mouse, ou {@code null}
+     */
+    public void pintarFim(Graphics2D g2, LayoutCampoMinado.Fim fim, String titulo,
+            String subtitulo, boolean novoRecorde, LayoutCampoMinado.Alvo hover) {
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        pintarPainel(g2, fim.painel(), COR_PAINEL, COR_TEXTO_HUD);
+        centraliza(g2, fim.titulo(), titulo, new Font("SansSerif", Font.BOLD, 24),
+                COR_TEXTO_HUD);
+        centraliza(g2, fim.subtitulo(), subtitulo,
+                new Font("SansSerif", Font.PLAIN, 15), COR_TEXTO_HUD);
+
+        if (novoRecorde) {
+            Rectangle recorde = fim.recorde();
+            g2.setColor(COR_ACENTO);
+            g2.fillRoundRect(recorde.x, recorde.y, recorde.width, recorde.height, 10, 10);
+            centraliza(g2, recorde, "NOVO RECORDE!", new Font("SansSerif", Font.BOLD, 14),
+                    Color.WHITE);
+        }
+
+        pintarBotao(g2, fim.jogarDeNovo(), LayoutCampoMinado.Alvo.JOGAR_DE_NOVO,
+                "JOGAR DE NOVO", hover);
+        pintarBotao(g2, fim.voltarAoMenu(), LayoutCampoMinado.Alvo.VOLTAR_AO_MENU,
+                "VOLTAR AO MENU", hover);
+
+        centraliza(g2, fim.dica(), "Enter joga de novo, M volta ao menu",
+                new Font("SansSerif", Font.PLAIN, 12), new Color(0x9a, 0xa1, 0xa9));
+    }
+
+    private void pintarBotao(Graphics2D g2, Rectangle botao, LayoutCampoMinado.Alvo alvo,
+            String rotulo, LayoutCampoMinado.Alvo hover) {
+        if (botao == null) {
+            return;
+        }
+        boolean emHover = alvo == hover;
+        g2.setColor(emHover ? COR_BOTAO_HOVER : COR_BOTAO);
+        g2.fillRoundRect(botao.x, botao.y, botao.width, botao.height, 8, 8);
+        g2.setColor(COR_TEXTO_HUD);
+        g2.setStroke(new BasicStroke(2));
+        g2.drawRoundRect(botao.x, botao.y, botao.width, botao.height, 8, 8);
+        centraliza(g2, botao, rotulo, new Font("SansSerif", Font.BOLD, 14), COR_TEXTO_HUD);
+    }
+
+    /** Um texto centrado no retângulo, sem registrar o pincel. */
+    private void centraliza(Graphics2D g2, Rectangle area, String texto, Font fonte,
+            Color cor) {
+        g2.setFont(fonte);
+        g2.setColor(cor);
+        FontMetrics fm = g2.getFontMetrics();
+        int x = area.x + (area.width - fm.stringWidth(texto)) / 2;
+        int y = area.y + (area.height + fm.getAscent()) / 2;
+        g2.drawString(texto, x, y);
+    }
+
+    /** O painel com o fundo e a borda arredondada. */
+    private void pintarPainel(Graphics2D g2, Rectangle painel, Color fundo, Color borda) {
+        g2.setColor(fundo);
+        g2.fillRoundRect(painel.x, painel.y, painel.width, painel.height, 12, 12);
+        g2.setColor(borda);
+        g2.setStroke(new BasicStroke(2));
+        g2.drawRoundRect(painel.x, painel.y, painel.width, painel.height, 12, 12);
+    }
+
+    /** O sublinhado da dificuldade escolhida, embaixo do botão. */
+    private void desenhaSelecao(Graphics2D g2, Rectangle botao, boolean marcado) {
+        if (!marcado || botao == null) {
+            return;
+        }
+        g2.setColor(COR_ACENTO);
+        g2.fillRect(botao.x + 8, botao.y + botao.height - 6, botao.width - 16, 3);
     }
 
     private void pintarHud(Graphics2D g2, LayoutCampoMinado layout, Tabuleiro tabuleiro,

@@ -1,6 +1,7 @@
 package com.portfolio.campominado.ui;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -127,5 +128,98 @@ public class LayoutCampoMinadoTest {
         } catch (IllegalArgumentException esperada) {
             assertNotNull(esperada.getMessage());
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Menu e fim de partida
+    // ------------------------------------------------------------------
+
+    @Test
+    public void menuCabeInteiroNaJanelaDohorCampoFacil() {
+        LayoutCampoMinado layout = new LayoutCampoMinado(LINHAS, COLUNAS, 30, 12, 64);
+        LayoutCampoMinado.Menu menu = layout.menu();
+        assertTrue("o painel do menu dentro da janela",
+                layout.dentroDaJanela(menu.painel()));
+        for (LayoutCampoMinado.Alvo alvo : LayoutCampoMinado.Alvo.values()) {
+            Rectangle r = menu.retangulo(alvo);
+            if (r != null) {
+                assertTrue("alvo " + alvo + " dentro da janela",
+                        layout.dentroDaJanela(r));
+                assertTrue("alvo " + alvo + " dentro do painel",
+                        menu.painel().contains(r));
+            }
+        }
+    }
+
+    @Test
+    public void menuTemAsTresDificuldadesNaMesmaLinhaEComecarEmbaixo() {
+        LayoutCampoMinado layout = new LayoutCampoMinado(LINHAS, COLUNAS, 30, 12, 64);
+        LayoutCampoMinado.Menu menu = layout.menu();
+        assertEquals(menu.facil().y, menu.medio().y);
+        assertEquals(menu.medio().y, menu.dificil().y);
+        assertTrue("FÁCIL à esquerda de MÉDIO",
+                menu.facil().x + menu.facil().width <= menu.medio().x);
+        assertTrue("MÉDIO à esquerda de DIFÍCIL",
+                menu.medio().x + menu.medio().width <= menu.dificil().x);
+        assertTrue("COMECAR abaixo dos botões de dificuldade",
+                menu.comecar().y >= menu.dificil().y + menu.dificil().height);
+        assertTrue("os três botões não sobram do painel",
+                menu.dificil().x + menu.dificil().width <= menu.painel().x
+                        + menu.painel().width);
+    }
+
+    @Test
+    public void menuAlvoEmAcertaOCentroDeCadaBotao() {
+        LayoutCampoMinado layout = new LayoutCampoMinado(LINHAS, COLUNAS, 30, 12, 64);
+        LayoutCampoMinado.Menu menu = layout.menu();
+        assertAcerta(menu, menu.facil(), LayoutCampoMinado.Alvo.FACIL);
+        assertAcerta(menu, menu.medio(), LayoutCampoMinado.Alvo.MEDIO);
+        assertAcerta(menu, menu.dificil(), LayoutCampoMinado.Alvo.DIFICIL);
+        assertAcerta(menu, menu.comecar(), LayoutCampoMinado.Alvo.COMECAR);
+    }
+
+    @Test
+    public void menuForaDeBotaoNaoAcertaAlvoNenhum() {
+        LayoutCampoMinado layout = new LayoutCampoMinado(LINHAS, COLUNAS, 30, 12, 64);
+        LayoutCampoMinado.Menu menu = layout.menu();
+        assertNull("o vão entre os botões é respiro, não clique",
+                LayoutCampoMinado.alvoEm(menu, menu.facil().x + menu.facil().width + 5,
+                        menu.facil().y + 5));
+        assertNull("o título não é um alvo",
+                LayoutCampoMinado.alvoEm(menu, menu.titulo().x + 10,
+                        menu.titulo().y + 10));
+    }
+
+    @Test
+    public void fimCabeInteiroENaoDeixaOsDoisBotoesSeTocarem() {
+        LayoutCampoMinado layout = new LayoutCampoMinado(LINHAS, COLUNAS, 30, 12, 64);
+        LayoutCampoMinado.Fim fim = layout.fim();
+        assertTrue(layout.dentroDaJanela(fim.painel()));
+        assertTrue(fim.painel().contains(fim.recorde()));
+        assertTrue("JOGAR DE NOVO acima de VOLTAR AO MENU",
+                fim.jogarDeNovo().y + fim.jogarDeNovo().height <= fim.voltarAoMenu().y);
+        assertFalse("o selo do recorde não invade o botão de cima",
+                fim.recorde().intersects(fim.jogarDeNovo()));
+        assertAcerta(fim, fim.jogarDeNovo(), LayoutCampoMinado.Alvo.JOGAR_DE_NOVO);
+        assertAcerta(fim, fim.voltarAoMenu(), LayoutCampoMinado.Alvo.VOLTAR_AO_MENU);
+    }
+
+    @Test
+    public void alvoDeUmaTelaNaoVazaNaOutra() {
+        LayoutCampoMinado layout = new LayoutCampoMinado(LINHAS, COLUNAS, 30, 12, 64);
+        assertNull("o menu não tem JOGAR DE NOVO",
+                layout.menu().retangulo(LayoutCampoMinado.Alvo.JOGAR_DE_NOVO));
+        assertNull("o fim não tem COMECAR",
+                layout.fim().retangulo(LayoutCampoMinado.Alvo.COMECAR));
+        assertNull("o fim não tem dificuldade",
+                layout.fim().retangulo(LayoutCampoMinado.Alvo.FACIL));
+    }
+
+    private void assertAcerta(LayoutCampoMinado.Alvos tela, Rectangle botao,
+            LayoutCampoMinado.Alvo alvo) {
+        assertNotNull("o alvo " + alvo + " existe", botao);
+        assertEquals("o centro do botão acerta " + alvo, alvo,
+                LayoutCampoMinado.alvoEm(tela, botao.x + botao.width / 2,
+                        botao.y + botao.height / 2));
     }
 }

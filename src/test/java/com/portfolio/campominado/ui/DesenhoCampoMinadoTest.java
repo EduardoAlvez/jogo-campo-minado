@@ -122,6 +122,77 @@ public class DesenhoCampoMinadoTest {
         assertNull(DesenhoCampoMinado.corDoNumero(9));
     }
 
+    // ------------------------------------------------------------------
+    // Menu e fim de partida
+    // ------------------------------------------------------------------
+
+    @Test
+    public void menuPintaOPainelPorCimaDoFundo() {
+        LayoutCampoMinado.Menu menu = layout.menu();
+        BufferedImage img = pintarMenu(false, Dificuldade.FACIL, null);
+        assertEquals("o painel do menu cobre o centro da janela",
+                DesenhoCampoMinado.COR_PAINEL,
+                new Color(img.getRGB(menu.painel().x + 50, menu.painel().y + 50)));
+        assertEquals("a margem fora do painel segue o fundo",
+                DesenhoCampoMinado.FUNDO, new Color(img.getRGB(3, 3)));
+    }
+
+    @Test
+    public void menuSublinhaSomenteADificuldadeEscolhida() {
+        LayoutCampoMinado.Menu menu = layout.menu();
+        BufferedImage comFacil = pintarMenu(false, Dificuldade.FACIL, null);
+        BufferedImage comMedio = pintarMenu(false, Dificuldade.MEDIO, null);
+        int meio = menu.medio().x + menu.medio().width / 2;
+        int sob = menu.medio().y + menu.medio().height - 5;
+        assertEquals("com FÁCIL o sublinhado não está sob o MÉDIO",
+                DesenhoCampoMinado.COR_BOTAO, new Color(comFacil.getRGB(meio, sob)));
+        assertEquals("com MÉDIO o sublinhado fica sob o MÉDIO",
+                DesenhoCampoMinado.COR_ACENTO, new Color(comMedio.getRGB(meio, sob)));
+    }
+
+    @Test
+    public void botaoSobOMouseFicaMaisClaro() {
+        LayoutCampoMinado.Menu menu = layout.menu();
+        BufferedImage semHover = pintarMenu(false, Dificuldade.FACIL, null);
+        BufferedImage comHover = pintarMenu(false, Dificuldade.FACIL,
+                LayoutCampoMinado.Alvo.FACIL);
+        Rectangle b = menu.facil();
+        Color pontoSem = new Color(semHover.getRGB(b.x + 10, b.y + 10));
+        Color pontoCom = new Color(comHover.getRGB(b.x + 10, b.y + 10));
+        assertEquals(DesenhoCampoMinado.COR_BOTAO, pontoSem);
+        assertEquals(DesenhoCampoMinado.COR_BOTAO_HOVER, pontoCom);
+    }
+
+    @Test
+    public void fimDesenhaOSeloDeRecordeSomenteQuandoEhNovo() {
+        LayoutCampoMinado.Fim fim = layout.fim();
+        BufferedImage comSelo = pintarFim(true, null);
+        BufferedImage semSelo = pintarFim(false, null);
+        Rectangle selo = fim.recorde();
+        int x = selo.x + selo.width / 2;
+        int y = selo.y + 2;
+        assertEquals("sem recorde o selo é a cor do painel",
+                DesenhoCampoMinado.COR_PAINEL, new Color(semSelo.getRGB(x, y)));
+        assertEquals("com recorde o selo ganha a cor de acento",
+                DesenhoCampoMinado.COR_ACENTO, new Color(comSelo.getRGB(x, y)));
+    }
+
+    @Test
+    public void fimTemOSeloEDoTesBotoesPintados() {
+        LayoutCampoMinado.Fim fim = layout.fim();
+        BufferedImage img = pintarFim(false, null);
+        assertEquals(DesenhoCampoMinado.COR_PAINEL,
+                new Color(img.getRGB(fim.painel().x + 50, fim.painel().y + 50)));
+        assertFalse("JOGAR DE NOVO tem tinta própria",
+                DesenhoCampoMinado.COR_PAINEL.equals(
+                        new Color(img.getRGB(fim.jogarDeNovo().x + 10,
+                                fim.jogarDeNovo().y + 10))));
+        assertFalse("VOLTAR AO MENU tem tinta própria",
+                DesenhoCampoMinado.COR_PAINEL.equals(
+                        new Color(img.getRGB(fim.voltarAoMenu().x + 10,
+                                fim.voltarAoMenu().y + 10))));
+    }
+
     private boolean existeCelulaFechada(BufferedImage img) {
         for (int l = 0; l < 9; l++) {
             for (int c = 0; c < 9; c++) {
@@ -138,6 +209,26 @@ public class DesenhoCampoMinadoTest {
                 layout.getAlturaJanela(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2 = img.createGraphics();
         new DesenhoCampoMinado().pintar(g2, tabuleiro, layout, 2, 2, cursor, 3, "Fácil");
+        g2.dispose();
+        return img;
+    }
+
+    private BufferedImage pintarMenu(boolean cursor, Dificuldade selecionada,
+            LayoutCampoMinado.Alvo hover) {
+        BufferedImage img = new BufferedImage(layout.getLarguraJanela(),
+                layout.getAlturaJanela(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = img.createGraphics();
+        new DesenhoCampoMinado().pintarMenu(g2, layout.menu(), selecionada, hover);
+        g2.dispose();
+        return img;
+    }
+
+    private BufferedImage pintarFim(boolean novoRecorde, LayoutCampoMinado.Alvo hover) {
+        BufferedImage img = new BufferedImage(layout.getLarguraJanela(),
+                layout.getAlturaJanela(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = img.createGraphics();
+        new DesenhoCampoMinado().pintarFim(g2, layout.fim(), "Você perdeu",
+                "Tempo: 12s  Melhor: 9s", novoRecorde, hover);
         g2.dispose();
         return img;
     }
