@@ -59,7 +59,7 @@ O build gera também o executável Windows (`target/jogo-campo-minado.exe`) com 
 
 ## Testes
 
-**104 testes** com JUnit 4, cobertura com JaCoCo:
+**109 testes** com JUnit 4, cobertura com JaCoCo:
 
 ```
 mvn test
