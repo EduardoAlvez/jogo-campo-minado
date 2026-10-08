@@ -43,13 +43,6 @@ public final class TelaCampoMinado extends JFrame {
     /** De quanto em quanto o cronômetro anda. */
     static final int INTERVALO_TIMER_MS = 1000;
 
-    /**
-     * Quanto a tela do fim espera antes de cobrir o campo resolvido: tempo para
-     * o jogador ver as bombas reveladas depois da derrota (e o campo todo aberto
-     * depois da vitória).
-     */
-    static final int INTERVALO_FIM_MS = 1000;
-
     /** A tela que está na frente. */
     public enum Tela {
         MENU, JOGO, FIM
@@ -61,7 +54,6 @@ public final class TelaCampoMinado extends JFrame {
 
     private transient Tabuleiro tabuleiro;
     private transient Timer timer;
-    private transient Timer timerDoFim;
     private int segundos;
     private int cursorLinha;
     private int cursorColuna;
@@ -164,6 +156,10 @@ public final class TelaCampoMinado extends JFrame {
      * <p>Método separado do listener para o teste alcançá-lo sem evento.
      */
     void processarClique(int x, int y, boolean botaoDireito) {
+        if (tela == Tela.JOGO && partidaAcabou()) {
+            irParaFim();
+            return;
+        }
         if (tela == Tela.MENU) {
             tratarCliqueNaAlvo(LayoutCampoMinado.alvoEm(layout.menu(), x, y));
             return;
@@ -227,7 +223,6 @@ public final class TelaCampoMinado extends JFrame {
         cursorLinha = 0;
         cursorColuna = 0;
         pararCronometro();
-        cancelarFimAgendado();
         tela = Tela.JOGO;
         hover = null;
         ajustarJanela();
@@ -237,7 +232,6 @@ public final class TelaCampoMinado extends JFrame {
     /** Volta ao menu, deixando a dificuldade escolhida guardada. */
     void voltarAoMenu() {
         pararCronometro();
-        cancelarFimAgendado();
         tela = Tela.MENU;
         hover = null;
         repaint();
@@ -313,7 +307,6 @@ public final class TelaCampoMinado extends JFrame {
 
     /** Monta a tela de fim: o resultado, e o recorde se a vitória foi dele. */
     private void mostrarFim(Tabuleiro.Estado estado) {
-        cancelarFimAgendado();
         fimVitoria = estado == Tabuleiro.Estado.GANHOU;
         fimMelhorTempo = RegistroDeTempos.melhorTempo(dificuldade);
         fimNovoRecorde = false;
@@ -323,25 +316,20 @@ public final class TelaCampoMinado extends JFrame {
         }
         // Não troca de tela na hora: a partida acabou, mas o campo resolvido
         // (as minas reveladas na derrota, tudo aberto na vitória) fica à mostra
-        // por um instante antes de a tela de fim cobri-lo.
-        timerDoFim = new Timer(INTERVALO_FIM_MS, e -> irParaFim());
-        timerDoFim.setRepeats(false);
-        timerDoFim.start();
+        // até o primeiro toque — tecla ou clique — que leva à tela de fim.
     }
 
-    /** Vai, enfim, para a tela de fim. Chamado pelo timer e pelo teste. */
+    /** A partida acabou, e o campo resolvido ainda está à mostra. */
+    private boolean partidaAcabou() {
+        Tabuleiro.Estado estado = tabuleiro.getEstado();
+        return estado == Tabuleiro.Estado.GANHOU || estado == Tabuleiro.Estado.PERDEU;
+    }
+
+    /** Vai, enfim, para a tela de fim. Chamado pelo toque e pelo teste. */
     void irParaFim() {
-        cancelarFimAgendado();
         tela = Tela.FIM;
         hover = null;
         repaint();
-    }
-
-    private void cancelarFimAgendado() {
-        if (timerDoFim != null) {
-            timerDoFim.stop();
-            timerDoFim = null;
-        }
     }
 
     // ------------------------------------------------------------------
@@ -415,6 +403,10 @@ public final class TelaCampoMinado extends JFrame {
                 default:
                     return false;
             }
+        }
+        if (tela == Tela.JOGO && partidaAcabou()) {
+            irParaFim();
+            return true;
         }
         switch (codigo) {
             case KeyEvent.VK_UP:
@@ -490,7 +482,6 @@ public final class TelaCampoMinado extends JFrame {
     /** Recomeça a partida atual: tabuleiro novo, relógio parado, cursor na origem. */
     public void reiniciar() {
         pararCronometro();
-        cancelarFimAgendado();
         tabuleiro = novoTabuleiro();
         segundos = 0;
         cursorLinha = 0;

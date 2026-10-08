@@ -287,7 +287,7 @@ public class TelaCampoMinadoTest {
     // ------------------------------------------------------------------
 
     @Test
-    public void aoVencerOCampoFicavelVisivelPorUmInstanteAntesDoFim() {
+    public void aoVencerOCampoReveladoFicaNaTelaAteOToque() {
         tela.comecar();
         abreCelula(layout.celula(0, 0));
 
@@ -300,7 +300,7 @@ public class TelaCampoMinadoTest {
             }
         }
 
-        assertEquals("a vitória abraça o campo antes de a tela de fim cobri-lo",
+        assertEquals("a vitória deixa o campo aberto à mostra até o toque",
                 TelaCampoMinado.Tela.JOGO, tela.getTela());
         assertTrue("tudo o que não é mina ficou aberto", tab.celulasAbertas() == tab.getLinhas()
                 * tab.getColunas() - tab.getMinas());
@@ -328,7 +328,7 @@ public class TelaCampoMinadoTest {
     }
 
     @Test
-    public void aoPerderOCampoRevelaAsMinasAntesDeIrParaOFim() {
+    public void aoPerderOCampoRevelaAsMinasAteOToque() {
         tela.comecar();
         abreCelula(layout.celula(0, 0));
 
@@ -347,6 +347,33 @@ public class TelaCampoMinadoTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void teclaDepoisDaDerrotaLevaATelaDeFimSemAgir() {
+        tela.comecar();
+        abreCelula(layout.celula(0, 0));
+        int[] comMina = procuraFechada(tela.getTabuleiro(), true);
+        abreCelula(layout.celula(comMina[0], comMina[1]));
+        assertEquals(TelaCampoMinado.Tela.JOGO, tela.getTela());
+
+        assertTrue("o primeiro toque de tecla é tratado e vira a tela de fim",
+                tela.tratarTecla(KeyEvent.VK_ENTER));
+        assertEquals(TelaCampoMinado.Tela.FIM, tela.getTela());
+        assertEquals("o toque só revela o fim, não começa outra partida",
+                Dificuldade.FACIL, tela.getDificuldade());
+    }
+
+    @Test
+    public void cliqueDepoisDaDerrotaLevaATelaDeFimSemAbrirCelula() {
+        tela.comecar();
+        abreCelula(layout.celula(0, 0));
+        int[] comMina = procuraFechada(tela.getTabuleiro(), true);
+        abreCelula(layout.celula(comMina[0], comMina[1]));
+        assertEquals(TelaCampoMinado.Tela.JOGO, tela.getTela());
+
+        tela.processarClique(layout.celula(1, 1).x + 15, layout.celula(1, 1).y + 15, false);
+        assertEquals(TelaCampoMinado.Tela.FIM, tela.getTela());
     }
 
     @Test
