@@ -56,6 +56,21 @@ public class TelaCampoMinadoTest {
     }
 
     // ------------------------------------------------------------------
+    // A janela e o tamanho
+    // ------------------------------------------------------------------
+
+    @Test
+    public void oConteudoDaJanelaPintaOTamanhoExatoDoLayout() {
+        assertEquals("o painel pinta exatamente a largura do layout: se o frame "
+                + "declarar o tamanho preferido, o pack() encolhe o conteúdo pelos "
+                + "insets e corta o lado direito do campo e do menu",
+                layout.getLarguraJanela(), tela.getContentPane().getWidth());
+        assertEquals("o painel pinta exatamente a altura do layout: senão a "
+                + "barra de título come a parte de baixo do campo",
+                layout.getAlturaJanela(), tela.getContentPane().getHeight());
+    }
+
+    // ------------------------------------------------------------------
     // Menu
     // ------------------------------------------------------------------
 
@@ -272,7 +287,7 @@ public class TelaCampoMinadoTest {
     // ------------------------------------------------------------------
 
     @Test
-    public void varrerTudoSeguroVaiParaOFimComSeloDeRecorde() {
+    public void aoVencerOCampoFicavelVisivelPorUmInstanteAntesDoFim() {
         tela.comecar();
         abreCelula(layout.celula(0, 0));
 
@@ -285,10 +300,53 @@ public class TelaCampoMinadoTest {
             }
         }
 
+        assertEquals("a vitória abraça o campo antes de a tela de fim cobri-lo",
+                TelaCampoMinado.Tela.JOGO, tela.getTela());
+        assertTrue("tudo o que não é mina ficou aberto", tab.celulasAbertas() == tab.getLinhas()
+                * tab.getColunas() - tab.getMinas());
+    }
+
+    @Test
+    public void varrerTudoSeguroVaiParaOFimComSeloDeRecorde() {
+        tela.comecar();
+        abreCelula(layout.celula(0, 0));
+
+        Tabuleiro tab = tela.getTabuleiro();
+        for (int l = 0; l < tab.getLinhas(); l++) {
+            for (int c = 0; c < tab.getColunas(); c++) {
+                if (!tab.getCelula(l, c).isMinado() && !tab.getCelula(l, c).isAberto()) {
+                    abreCelula(layout.celula(l, c));
+                }
+            }
+        }
+        tela.irParaFim();
+
         assertEquals(TelaCampoMinado.Tela.FIM, tela.getTela());
         assertTrue("ganhar é vitória", tela.fimVenceu());
         assertTrue("o primeiro recorde da dificuldade nasce selado",
                 tela.fimNovoRecorde());
+    }
+
+    @Test
+    public void aoPerderOCampoRevelaAsMinasAntesDeIrParaOFim() {
+        tela.comecar();
+        abreCelula(layout.celula(0, 0));
+
+        Tabuleiro tab = tela.getTabuleiro();
+        int[] comMina = procuraFechada(tab, true);
+        abreCelula(layout.celula(comMina[0], comMina[1]));
+
+        assertEquals("a derrota não pode pular para a tela de fim sem mostrar o "
+                + "campo: o jogador precisa ver onde estavam as bombas",
+                TelaCampoMinado.Tela.JOGO, tela.getTela());
+        for (int l = 0; l < tab.getLinhas(); l++) {
+            for (int c = 0; c < tab.getColunas(); c++) {
+                if (tab.getCelula(l, c).isMinado()) {
+                    assertTrue("a mina (" + l + "," + c + ") foi revelada",
+                            tab.getCelula(l, c).isAberto());
+                }
+            }
+        }
     }
 
     @Test
@@ -298,6 +356,7 @@ public class TelaCampoMinadoTest {
 
         int[] comMina = procuraFechada(tela.getTabuleiro(), true);
         abreCelula(layout.celula(comMina[0], comMina[1]));
+        tela.irParaFim();
 
         assertEquals(TelaCampoMinado.Tela.FIM, tela.getTela());
         assertFalse("perder não é vitória", tela.fimVenceu());
@@ -310,6 +369,7 @@ public class TelaCampoMinadoTest {
         abreCelula(layout.celula(0, 0));
         int[] comMina = procuraFechada(tela.getTabuleiro(), true);
         abreCelula(layout.celula(comMina[0], comMina[1]));
+        tela.irParaFim();
         assertEquals(TelaCampoMinado.Tela.FIM, tela.getTela());
 
         assertTrue(tela.tratarTecla(KeyEvent.VK_ENTER));
@@ -324,6 +384,7 @@ public class TelaCampoMinadoTest {
         abreCelula(layout.celula(0, 0));
         int[] comMina = procuraFechada(tela.getTabuleiro(), true);
         abreCelula(layout.celula(comMina[0], comMina[1]));
+        tela.irParaFim();
 
         assertTrue(tela.tratarTecla(KeyEvent.VK_M));
         assertEquals(TelaCampoMinado.Tela.MENU, tela.getTela());

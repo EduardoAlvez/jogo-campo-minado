@@ -52,7 +52,9 @@ tools/   # Geradores de recursos (fora do build do Maven)
   efeito tocar — EXPLODIR e VENCER vencem ABRIR e MARCAR. Os efeitos são
   sintetizados por `tools/GerarSons.java` e carregados **de dentro do jar**.
 - **Vitória** = toda célula não-minada aberta (bandeiras não obrigatórias).
-  **Derrota** = abrir uma mina revela todas.
+  **Derrota** = abrir uma mina revela todas. Nos dois casos o campo resolvido
+  fica à mostra por um segundo antes de a tela de fim cobri-lo — na derrota dá
+  para ver onde estavam as bombas.
 - **Bandeira não abre**; campo marcado não abre com clique nem cascata.
 - **Abertura em cascata** por fila (BFS), não recursão — sem risco de estouro
   em campos grandes cheios de zeros.

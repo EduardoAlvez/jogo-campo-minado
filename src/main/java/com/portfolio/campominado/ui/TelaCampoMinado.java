@@ -43,6 +43,13 @@ public final class TelaCampoMinado extends JFrame {
     /** De quanto em quanto o cronômetro anda. */
     static final int INTERVALO_TIMER_MS = 1000;
 
+    /**
+     * Quanto a tela do fim espera antes de cobrir o campo resolvido: tempo para
+     * o jogador ver as bombas reveladas depois da derrota (e o campo todo aberto
+     * depois da vitória).
+     */
+    static final int INTERVALO_FIM_MS = 1000;
+
     /** A tela que está na frente. */
     public enum Tela {
         MENU, JOGO, FIM
@@ -54,6 +61,7 @@ public final class TelaCampoMinado extends JFrame {
 
     private transient Tabuleiro tabuleiro;
     private transient Timer timer;
+    private transient Timer timerDoFim;
     private int segundos;
     private int cursorLinha;
     private int cursorColuna;
@@ -80,7 +88,10 @@ public final class TelaCampoMinado extends JFrame {
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(false);
-        setPreferredSize(new Dimension(layout.getLarguraJanela(), layout.getAlturaJanela()));
+        // O tamanho preferido é do painel de conteúdo, não do frame: se o frame
+        // declarar o tamanho do layout, o pack() usa esse valor como janela
+        // externa e o conteúdo encolhe pelos insets da barra de título — o lado
+        // direito e o de baixo do campo ficam cortados.
         setBackground(DesenhoCampoMinado.FUNDO);
         setFocusable(true);
         setContentPane(new Painel());
@@ -216,6 +227,7 @@ public final class TelaCampoMinado extends JFrame {
         cursorLinha = 0;
         cursorColuna = 0;
         pararCronometro();
+        cancelarFimAgendado();
         tela = Tela.JOGO;
         hover = null;
         ajustarJanela();
@@ -225,6 +237,7 @@ public final class TelaCampoMinado extends JFrame {
     /** Volta ao menu, deixando a dificuldade escolhida guardada. */
     void voltarAoMenu() {
         pararCronometro();
+        cancelarFimAgendado();
         tela = Tela.MENU;
         hover = null;
         repaint();
@@ -235,10 +248,9 @@ public final class TelaCampoMinado extends JFrame {
         System.exit(0);
     }
 
-    /** Reajusta o painel e a janela ao tamanho da dificuldade nova. */
+    /** Reajusta o painel ao tamanho da dificuldade nova, e a janela com ele. */
     private void ajustarJanela() {
         Dimension novo = new Dimension(layout.getLarguraJanela(), layout.getAlturaJanela());
-        setPreferredSize(novo);
         getContentPane().setPreferredSize(novo);
         pack();
     }
@@ -301,6 +313,7 @@ public final class TelaCampoMinado extends JFrame {
 
     /** Monta a tela de fim: o resultado, e o recorde se a vitória foi dele. */
     private void mostrarFim(Tabuleiro.Estado estado) {
+        cancelarFimAgendado();
         fimVitoria = estado == Tabuleiro.Estado.GANHOU;
         fimMelhorTempo = RegistroDeTempos.melhorTempo(dificuldade);
         fimNovoRecorde = false;
@@ -308,8 +321,27 @@ public final class TelaCampoMinado extends JFrame {
             fimNovoRecorde = RegistroDeTempos.registrar(dificuldade, segundos);
             fimMelhorTempo = RegistroDeTempos.melhorTempo(dificuldade);
         }
+        // Não troca de tela na hora: a partida acabou, mas o campo resolvido
+        // (as minas reveladas na derrota, tudo aberto na vitória) fica à mostra
+        // por um instante antes de a tela de fim cobri-lo.
+        timerDoFim = new Timer(INTERVALO_FIM_MS, e -> irParaFim());
+        timerDoFim.setRepeats(false);
+        timerDoFim.start();
+    }
+
+    /** Vai, enfim, para a tela de fim. Chamado pelo timer e pelo teste. */
+    void irParaFim() {
+        cancelarFimAgendado();
         tela = Tela.FIM;
         hover = null;
+        repaint();
+    }
+
+    private void cancelarFimAgendado() {
+        if (timerDoFim != null) {
+            timerDoFim.stop();
+            timerDoFim = null;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -458,6 +490,7 @@ public final class TelaCampoMinado extends JFrame {
     /** Recomeça a partida atual: tabuleiro novo, relógio parado, cursor na origem. */
     public void reiniciar() {
         pararCronometro();
+        cancelarFimAgendado();
         tabuleiro = novoTabuleiro();
         segundos = 0;
         cursorLinha = 0;
