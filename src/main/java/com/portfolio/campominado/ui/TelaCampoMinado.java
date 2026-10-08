@@ -1,6 +1,9 @@
 package com.portfolio.campominado.ui;
 
+import com.portfolio.campominado.audio.Sons;
+import com.portfolio.campominado.audio.Trilha;
 import com.portfolio.campominado.core.Dificuldade;
+import com.portfolio.campominado.core.RegistroDeTempos;
 import com.portfolio.campominado.core.Tabuleiro;
 
 import java.awt.Dimension;
@@ -14,18 +17,24 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 /**
- * A janela do Campo Minado.
+ * A janela do Campo Minado, com as três telas: menu, jogo e fim.
  *
- * <p>Aqui não há regra nenhuma: tudo que decide mora em {@link Tabuleiro}.
- * Esta classe entrega o clique do mouse (esquerda abre, direita marca), as
- * teclas (setas movem o cursor, espaço abre, F marca, R reinicia) e o
- * cronômetro — e repassa o desenho para {@link DesenhoCampoMinado}, que não
- * sabe nada de janela. A geometria do clique é do {@link LayoutCampoMinado}.
+ * <p>Aqui não há regra nenhuma: tudo que decide mora em {@link Tabuleiro},
+ * e as telas só escolhem <b>qual</b> desenho usar e <b>onde</b> o clique cai.
+ * O menu devolve a dificuldade escolhida ao jogo; o fim mostra o resultado, o
+ * tempo e o selo de recorde; o jogo entrega o clique do mouse (esquerda abre,
+ * direita marca), as teclas (setas/WASD movem o cursor, espaço abre, F marca,
+ * R reinicia, ESC volta ao menu) e o cronômetro. O desenho fica com
+ * {@link DesenhoCampoMinado}, que não sabe nada de janela; a geometria é do
+ * {@link LayoutCampoMinado}, que também não sabe.
+ *
+ * <p><b>O som decide-se em {@link Trilha}</b>, fora da janela: um retrato do
+ * tabuleiro antes da jogada e outro depois dizem o que tocar. É uma função
+ * pura, testada sem display.
  *
  * <p>O cronômetro é um {@link Timer} que só roda entre o primeiro clique e o
  * fim da partida, e o tempo é contado no tique do relógio, nunca dentro do
- * desenho — senão cada repintura inventar-se-ia um segundo novo. Ganhou ou
- * perdeu, o relógio para e o quadro mostra o tempo final.
+ * desenho — senão cada repintura inventaria um segundo novo.
  */
 public final class TelaCampoMinado extends JFrame {
 
@@ -34,8 +43,13 @@ public final class TelaCampoMinado extends JFrame {
     /** De quanto em quanto o cronômetro anda. */
     static final int INTERVALO_TIMER_MS = 1000;
 
-    private final transient LayoutCampoMinado layout;
-    private final transient Dificuldade dificuldade;
+    /** A tela que está na frente. */
+    public enum Tela {
+        MENU, JOGO, FIM
+    }
+
+    private LayoutCampoMinado layout;
+    private Dificuldade dificuldade;
     private final transient DesenhoCampoMinado desenho = new DesenhoCampoMinado();
 
     private transient Tabuleiro tabuleiro;
@@ -44,6 +58,12 @@ public final class TelaCampoMinado extends JFrame {
     private int cursorLinha;
     private int cursorColuna;
 
+    private Tela tela = Tela.MENU;
+    private LayoutCampoMinado.Alvo hover;
+    private boolean fimVitoria;
+    private boolean fimNovoRecorde;
+    private int fimMelhorTempo;
+
     /** Cria a janela com a dificuldade e o layout que ela pede. */
     public TelaCampoMinado(Dificuldade dificuldade) {
         this(dificuldade, new LayoutCampoMinado(dificuldade));
@@ -51,9 +71,6 @@ public final class TelaCampoMinado extends JFrame {
 
     /**
      * Cria a janela com um layout dado (para o teste sem abrir janela própria).
-     *
-     * @param dificuldade a dificuldade do tabuleiro
-     * @param layout      onde cada coisa é desenhada
      */
     public TelaCampoMinado(Dificuldade dificuldade, LayoutCampoMinado layout) {
         super("Campo Minado");
@@ -88,6 +105,20 @@ public final class TelaCampoMinado extends JFrame {
                     processarClique(e.getX(), e.getY(),
                             SwingUtilities.isRightMouseButton(e));
                 }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    if (hover != null) {
+                        hover = null;
+                        repaint();
+                    }
+                }
+            });
+            addMouseMotionListener(new MouseAdapter() {
+                @Override
+                public void mouseMoved(MouseEvent e) {
+                    moverPonteiroPara(e.getX(), e.getY());
+                }
             });
         }
 
@@ -96,9 +127,16 @@ public final class TelaCampoMinado extends JFrame {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g.create();
             try {
-                desenho.pintar(g2, tabuleiro, layout,
-                        cursorLinha, cursorColuna, mostraCursor(),
-                        segundos, dificuldade.getRotulo());
+                if (tela == Tela.MENU) {
+                    desenho.pintarMenu(g2, layout.menu(), dificuldade, hover);
+                } else if (tela == Tela.FIM) {
+                    desenho.pintarFim(g2, layout.fim(), tituloDoFim(),
+                            subtituloDoFim(), fimNovoRecorde, hover);
+                } else {
+                    desenho.pintar(g2, tabuleiro, layout,
+                            cursorLinha, cursorColuna, mostraCursor(),
+                            segundos, dificuldade.getRotulo());
+                }
             } finally {
                 g2.dispose();
             }
@@ -106,21 +144,23 @@ public final class TelaCampoMinado extends JFrame {
     }
 
     // ------------------------------------------------------------------
-    // Mouse
+    // As três telas
     // ------------------------------------------------------------------
 
     /**
-     * Um clique no painel: esquerdo abre, direito marca, e o cursor acompanha.
+     * Clique no painel: no menu acerta um alvo, no jogo uma célula.
      *
-     * <p>Método separado do listener para o teste alcançá-lo sem evento: o que
-     * interessa é a regra de qual botão faz o quê e de o clique cair na célula
-     * certa pela geometria.
-     *
-     * @param x            coordenada horizontal do clique
-     * @param y            coordenada vertical do clique
-     * @param botaoDireito {@code true} marca, {@code false} abre
+     * <p>Método separado do listener para o teste alcançá-lo sem evento.
      */
     void processarClique(int x, int y, boolean botaoDireito) {
+        if (tela == Tela.MENU) {
+            tratarCliqueNaAlvo(LayoutCampoMinado.alvoEm(layout.menu(), x, y));
+            return;
+        }
+        if (tela == Tela.FIM) {
+            tratarCliqueNaAlvo(LayoutCampoMinado.alvoEm(layout.fim(), x, y));
+            return;
+        }
         int indice = layout.indiceDoPonto(x, y);
         if (indice < 0) {
             return;
@@ -129,11 +169,89 @@ public final class TelaCampoMinado extends JFrame {
         int linha = cursorLinha;
         int coluna = cursorColuna;
         if (botaoDireito) {
-            tabuleiro.alternarMarcacao(linha, coluna);
+            agir(() -> tabuleiro.alternarMarcacao(linha, coluna));
         } else {
-            tabuleiro.abrir(linha, coluna);
+            agir(() -> tabuleiro.abrir(linha, coluna));
         }
-        aposAcao();
+    }
+
+    private void tratarCliqueNaAlvo(LayoutCampoMinado.Alvo alvo) {
+        if (alvo == null) {
+            return;
+        }
+        switch (alvo) {
+            case FACIL:
+                escolher(Dificuldade.FACIL);
+                break;
+            case MEDIO:
+                escolher(Dificuldade.MEDIO);
+                break;
+            case DIFICIL:
+                escolher(Dificuldade.DIFICIL);
+                break;
+            case COMECAR:
+            case JOGAR_DE_NOVO:
+                comecar();
+                break;
+            case VOLTAR_AO_MENU:
+                voltarAoMenu();
+                break;
+            default:
+                // nenhum outro alvo existe
+        }
+    }
+
+    private void escolher(Dificuldade escolhida) {
+        if (dificuldade != escolhida) {
+            dificuldade = escolhida;
+            repaint();
+        }
+    }
+
+    /** Começa uma partida na dificuldade escolhida, da tela de menu ou de fim. */
+    void comecar() {
+        this.layout = new LayoutCampoMinado(dificuldade);
+        this.tabuleiro = novoTabuleiro();
+        segundos = 0;
+        cursorLinha = 0;
+        cursorColuna = 0;
+        pararCronometro();
+        tela = Tela.JOGO;
+        hover = null;
+        ajustarJanela();
+        repaint();
+    }
+
+    /** Volta ao menu, deixando a dificuldade escolhida guardada. */
+    void voltarAoMenu() {
+        pararCronometro();
+        tela = Tela.MENU;
+        hover = null;
+        repaint();
+    }
+
+    private void sair() {
+        dispose();
+        System.exit(0);
+    }
+
+    /** Reajusta o painel e a janela ao tamanho da dificuldade nova. */
+    private void ajustarJanela() {
+        Dimension novo = new Dimension(layout.getLarguraJanela(), layout.getAlturaJanela());
+        setPreferredSize(novo);
+        getContentPane().setPreferredSize(novo);
+        pack();
+    }
+
+    private String tituloDoFim() {
+        return fimVitoria ? "Você venceu!" : "Você perdeu";
+    }
+
+    private String subtituloDoFim() {
+        if (fimVitoria) {
+            return "Tempo: " + segundos + "s   Melhor: " + fimMelhorTempo + "s";
+        }
+        return "Tempo: " + segundos + "s";
     }
 
     // ------------------------------------------------------------------
@@ -149,7 +267,6 @@ public final class TelaCampoMinado extends JFrame {
         repaint();
     }
 
-    /** Liga o cronômetro no primeiro clique que começa a partida. */
     private void iniciarCronometro() {
         if (timer == null) {
             timer = new Timer(INTERVALO_TIMER_MS, e -> tique());
@@ -166,18 +283,53 @@ public final class TelaCampoMinado extends JFrame {
     }
 
     /**
-     * O que mudou depois de um clique ou tecla: liga o relógio quando a
-     * partida começa e o para quando ela acaba. É aqui, e não no desenho, que
-     * o tempo é marcado.
+     * O que mudou depois de um clique ou tecla: liga o relógio quando a partida
+     * começa e, quando ela acaba, para o relógio e vai para a tela de fim.
+     * É aqui, e não no desenho, que o tempo é marcado.
      */
     private void aposAcao() {
         Tabuleiro.Estado estado = tabuleiro.getEstado();
         if (estado == Tabuleiro.Estado.JOGANDO) {
             iniciarCronometro();
-        } else if (estado == Tabuleiro.Estado.GANHOU || estado == Tabuleiro.Estado.PERDEU) {
+        } else if (estado == Tabuleiro.Estado.GANHOU
+                || estado == Tabuleiro.Estado.PERDEU) {
             pararCronometro();
+            mostrarFim(estado);
         }
         repaint();
+    }
+
+    /** Monta a tela de fim: o resultado, e o recorde se a vitória foi dele. */
+    private void mostrarFim(Tabuleiro.Estado estado) {
+        fimVitoria = estado == Tabuleiro.Estado.GANHOU;
+        fimMelhorTempo = RegistroDeTempos.melhorTempo(dificuldade);
+        fimNovoRecorde = false;
+        if (fimVitoria) {
+            fimNovoRecorde = RegistroDeTempos.registrar(dificuldade, segundos);
+            fimMelhorTempo = RegistroDeTempos.melhorTempo(dificuldade);
+        }
+        tela = Tela.FIM;
+        hover = null;
+    }
+
+    // ------------------------------------------------------------------
+    // Som
+    // ------------------------------------------------------------------
+
+    /**
+     * Executa a jogada fotografando o antes, o depois e tocando o que mudou.
+     *
+     * <p>O retrato do antes é obrigatório: sem ele, ler o tabuleiro depois da
+     * jogada e chamar aquilo de "antes" passa o teste da regra certa no efeito
+     * errado — o som de abrir tocando junto do som de derrota, por exemplo.
+     */
+    private void agir(Runnable acao) {
+        Trilha.Retrato antes = Trilha.tira(tabuleiro);
+        acao.run();
+        for (Sons.Efeito efeito : Trilha.dePara(antes, Trilha.tira(tabuleiro))) {
+            Sons.tocar(efeito);
+        }
+        aposAcao();
     }
 
     // ------------------------------------------------------------------
@@ -185,17 +337,53 @@ public final class TelaCampoMinado extends JFrame {
     // ------------------------------------------------------------------
 
     /**
-     * Traduz uma tecla em ação.
+     * Traduz uma tecla em ação, conforme a tela da frente.
      *
-     * <p>Separado do tratamento de evento para o teste alcançar o teclado
-     * inteiro sem abrir portas. Mover o cursor nunca abre célula: a seta só
-     * anda, e o espaço é a única tecla que abre — do contrário o jogador
-     * arriscaria o primeiro clique sem querer.
+     * <p>No menu: 1-3 escolhem a dificuldade, Enter começa. No jogo: setas/WASD
+     * movem o cursor — sem abrir célula —, espaço abre, F marca, R reinicia e
+     * ESC volta ao menu. No fim: Enter joga de novo, M volta ao menu.
      *
      * @param codigo o {@code getKeyCode} da tecla
      * @return {@code true} se a tecla foi tratada
      */
     public boolean tratarTecla(int codigo) {
+        if (tela == Tela.MENU) {
+            switch (codigo) {
+                case KeyEvent.VK_1:
+                    escolher(Dificuldade.FACIL);
+                    return true;
+                case KeyEvent.VK_2:
+                    escolher(Dificuldade.MEDIO);
+                    return true;
+                case KeyEvent.VK_3:
+                    escolher(Dificuldade.DIFICIL);
+                    return true;
+                case KeyEvent.VK_ENTER:
+                case KeyEvent.VK_SPACE:
+                    comecar();
+                    return true;
+                case KeyEvent.VK_ESCAPE:
+                    sair();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        if (tela == Tela.FIM) {
+            switch (codigo) {
+                case KeyEvent.VK_ENTER:
+                    comecar();
+                    return true;
+                case KeyEvent.VK_M:
+                    voltarAoMenu();
+                    return true;
+                case KeyEvent.VK_ESCAPE:
+                    sair();
+                    return true;
+                default:
+                    return false;
+            }
+        }
         switch (codigo) {
             case KeyEvent.VK_UP:
             case KeyEvent.VK_W:
@@ -218,25 +406,25 @@ public final class TelaCampoMinado extends JFrame {
                 repaint();
                 return true;
             case KeyEvent.VK_SPACE:
-                tabuleiro.abrir(cursorLinha, cursorColuna);
-                aposAcao();
+                agir(() -> tabuleiro.abrir(cursorLinha, cursorColuna));
                 return true;
             case KeyEvent.VK_F:
-                tabuleiro.alternarMarcacao(cursorLinha, cursorColuna);
-                aposAcao();
+                agir(() -> tabuleiro.alternarMarcacao(cursorLinha, cursorColuna));
                 return true;
             case KeyEvent.VK_R:
                 reiniciar();
                 return true;
             case KeyEvent.VK_ESCAPE:
-                pararCronometro();
-                dispose();
-                System.exit(0);
+                voltarAoMenu();
                 return true;
             default:
                 return false;
         }
     }
+
+    // ------------------------------------------------------------------
+    // Cursor e ponteiro
+    // ------------------------------------------------------------------
 
     /** Anda com o cursor, preso na grade. */
     private void andarCursor(int dLinha, int dColuna) {
@@ -249,12 +437,25 @@ public final class TelaCampoMinado extends JFrame {
         cursorColuna = indice % layout.getColunas();
     }
 
+    private void moverPonteiroPara(int x, int y) {
+        LayoutCampoMinado.Alvo novo = null;
+        if (tela == Tela.MENU) {
+            novo = LayoutCampoMinado.alvoEm(layout.menu(), x, y);
+        } else if (tela == Tela.FIM) {
+            novo = LayoutCampoMinado.alvoEm(layout.fim(), x, y);
+        }
+        if (novo != hover) {
+            hover = novo;
+            repaint();
+        }
+    }
+
     private boolean mostraCursor() {
         Tabuleiro.Estado estado = tabuleiro.getEstado();
         return estado != Tabuleiro.Estado.GANHOU && estado != Tabuleiro.Estado.PERDEU;
     }
 
-    /** Recomeça do zero: tabuleiro novo, relógio parado, cursor na origem. */
+    /** Recomeça a partida atual: tabuleiro novo, relógio parado, cursor na origem. */
     public void reiniciar() {
         pararCronometro();
         tabuleiro = novoTabuleiro();
@@ -278,10 +479,9 @@ public final class TelaCampoMinado extends JFrame {
      *
      * <p>Usa {@code WHEN_IN_FOCUSED_WINDOW} e não um {@code KeyListener} na
      * janela: com listener, um clique em qualquer lugar tira o foco do painel
-     * e o teclado morre sem aviso — o defeito mais comum em jogo Swing, que
-     * nenhum teste de regra mostra, porque a regra está certa, quem não chega
-     * é a tecla. Com {@code WHEN_IN_FOCUSED_WINDOW} a tecla chega com a janela
-     * ativa, venha de onde vier o clique.
+     * e o teclado morre sem aviso — o defeito mais comum em jogo Swing. Com
+     * {@code WHEN_IN_FOCUSED_WINDOW} a tecla chega com a janela ativa, venha
+     * de onde vier o clique.
      */
     public void registrarTeclado() {
         javax.swing.InputMap im = getRootPane().getInputMap(
@@ -289,11 +489,13 @@ public final class TelaCampoMinado extends JFrame {
         javax.swing.ActionMap am = getRootPane().getActionMap();
 
         int[] teclas = {
+            KeyEvent.VK_1, KeyEvent.VK_2, KeyEvent.VK_3,
             KeyEvent.VK_UP, KeyEvent.VK_W,
             KeyEvent.VK_DOWN, KeyEvent.VK_S,
             KeyEvent.VK_LEFT, KeyEvent.VK_A,
             KeyEvent.VK_RIGHT, KeyEvent.VK_D,
-            KeyEvent.VK_SPACE, KeyEvent.VK_F, KeyEvent.VK_R, KeyEvent.VK_ESCAPE,
+            KeyEvent.VK_SPACE, KeyEvent.VK_F, KeyEvent.VK_R,
+            KeyEvent.VK_M, KeyEvent.VK_ENTER, KeyEvent.VK_ESCAPE,
         };
         for (int codigo : teclas) {
             final int tecla = codigo;
@@ -340,5 +542,21 @@ public final class TelaCampoMinado extends JFrame {
 
     int getCursorColuna() {
         return cursorColuna;
+    }
+
+    Tela getTela() {
+        return tela;
+    }
+
+    Dificuldade getDificuldade() {
+        return dificuldade;
+    }
+
+    boolean fimVenceu() {
+        return fimVitoria;
+    }
+
+    boolean fimNovoRecorde() {
+        return fimNovoRecorde;
     }
 }
